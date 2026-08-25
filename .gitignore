@@ -1,0 +1,6 @@
+# Reference docs only, never needed at runtime -- kept on disk, not shipped
+# with git-pull-based deploys. See frontend/.gitignore and backend/.gitignore
+# for that half's own node_modules/dist/env rules.
+docs
+
+.DS_Store

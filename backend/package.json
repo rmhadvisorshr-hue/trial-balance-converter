@@ -1,0 +1,25 @@
+{
+  "name": "trial-balance-converter-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "express": "^5.2.1",
+    "multer": "^2.2.0",
+    "pdfjs-dist": "^5.7.284",
+    "pdfkit": "^0.19.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.2.0",
+    "@types/node": "^22.16.5",
+    "@types/pdfkit": "^0.17.6",
+    "tsx": "^4.23.12",
+    "typescript": "^5.8.3"
+  }
+}
