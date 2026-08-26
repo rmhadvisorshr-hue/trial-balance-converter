@@ -5,6 +5,10 @@ import multer, { MulterError } from "multer";
 
 import { parseAndClassify, buildWorkbook, buildFinancialStatementsPdf } from "./lib/tb/pipeline";
 import type { ConvertPayload, EntityType } from "./lib/tb/types";
+import { analyzeWorkbookFiles, buildIcaiWorkbook, scaleAnalysis } from "./lib/icai/pipeline";
+import type { FileRole } from "./lib/icai/parsers/fileRoleDetector";
+import type { FiguresUnit } from "./lib/icai/excel/scale";
+import type { IcaiEntityKind, WorkbookAnalysis } from "./lib/icai/types";
 
 const PORT = Number(process.env.PORT) || 8097;
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -28,6 +32,14 @@ function sanitizeOutputName(name: string, extension: "xlsx" | "pdf") {
     .replace(/\.[^.]+$/, "")
     .replace(/[<>:"/\\|?*\r\n]/g, "")
     .trim();
+  return `${base || "financials"} - Financials.${extension}`;
+}
+
+// Unlike sanitizeOutputName above, the name here is an entity name (e.g.
+// "M/S SPACE HOME (A.G)"), not an uploaded filename - it has no extension to
+// strip, and its embedded periods must not be mistaken for one.
+function sanitizeEntityFileName(name: string, extension: "xlsx") {
+  const base = name.replace(/[<>:"/\\|?*\r\n]/g, "").trim();
   return `${base || "financials"} - Financials.${extension}`;
 }
 
@@ -77,6 +89,54 @@ app.post("/api/tbconvert", async (req, res) => {
     res.setHeader(
       "Content-Disposition",
       `attachment; filename="${sanitizeOutputName(firmName, "xlsx")}"`,
+    );
+    res.send(buffer);
+  } catch (error) {
+    console.error(error);
+    res.status(400).json(errorPayload(error));
+  }
+});
+
+app.post("/api/icai/analyze", upload.array("files"), async (req, res) => {
+  try {
+    const uploaded = (req.files as Express.Multer.File[] | undefined) ?? [];
+    if (uploaded.length === 0) {
+      res.status(400).json({ code: "FILE_REQUIRED", message: "Upload one or more accounting workbooks." });
+      return;
+    }
+    // Both optional: sent by the review step's "Confirm & Continue" once the
+    // CA has resolved an ambiguous role-detection / corrected the entity kind.
+    const roleOverrides = req.body.roleOverrides
+      ? (JSON.parse(req.body.roleOverrides) as Record<string, FileRole>)
+      : undefined;
+    const entityKindOverride = req.body.entityKind ? (req.body.entityKind as IcaiEntityKind) : undefined;
+
+    const outcome = await analyzeWorkbookFiles(
+      uploaded.map((f) => ({ buffer: f.buffer, fileName: f.originalname })),
+      roleOverrides,
+      entityKindOverride,
+    );
+    res.json(outcome);
+  } catch (error) {
+    console.error(error);
+    res.status(400).json(errorPayload(error));
+  }
+});
+
+app.post("/api/icai/generate", async (req, res) => {
+  try {
+    const body = req.body as { analysis: WorkbookAnalysis; figuresUnit?: FiguresUnit };
+    const analysis = body?.analysis;
+    if (!analysis || !Array.isArray(analysis.accounts)) {
+      res.status(400).json({ code: "BAD_PAYLOAD", message: "Invalid analysis payload." });
+      return;
+    }
+    const scaled = scaleAnalysis(analysis, body.figuresUnit || "actual");
+    const buffer = await buildIcaiWorkbook(scaled);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${sanitizeEntityFileName(analysis.entityName || "financials", "xlsx")}"`,
     );
     res.send(buffer);
   } catch (error) {

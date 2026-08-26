@@ -1,8 +1,7 @@
 import { useMemo, useRef, useState } from "react";
-import { FileSpreadsheet, Upload, Play, AlertTriangle, Loader2 } from "lucide-react";
+import { FileSpreadsheet, Upload, Play, Loader2 } from "lucide-react";
 import {
   ENTITY_LABELS,
-  FIGURES_UNIT_LABELS,
   OUTPUT_FORMAT_LABELS,
   STATEMENT_CODES,
   type ClassifiedLedger,
@@ -15,12 +14,18 @@ import {
   type StatementStyle,
 } from "./lib/types";
 import { parseTrialBalanceFile, convertToWorkbook } from "./lib/tb-client";
+import IcaiWorkflow from "./IcaiWorkflow";
+import ErrorBanner from "./components/ErrorBanner";
+import EntityTypeSelect from "./components/EntityTypeSelect";
+import FiguresUnitSelect from "./components/FiguresUnitSelect";
 
 const ENTITY_ORDER: EntityType[] = ["pvtltd", "partnership", "llp", "proprietor"];
-const FIGURES_UNIT_ORDER: FiguresUnit[] = ["actual", "thousands", "lakhs"];
 const OUTPUT_FORMAT_ORDER: OutputFormat[] = ["excel", "pdf"];
 
+type InputType = "trialBalance" | "accountingWorkbook";
+
 export default function App() {
+  const [inputType, setInputType] = useState<InputType>("trialBalance");
   const [entity, setEntity] = useState<EntityType>("pvtltd");
   const [file, setFile] = useState<File | null>(null);
   const [parsed, setParsed] = useState<ParseResult | null>(null);
@@ -97,10 +102,10 @@ export default function App() {
               <FileSpreadsheet className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-lg font-bold">Trial Balance → Financial Statements</h1>
+              <h1 className="text-lg font-bold">Financial Statement Generator</h1>
               <p className="text-xs text-muted-foreground">
-                Upload a Tally trial balance, choose the entity type, review the mapping, and download
-                the CA format Excel.
+                Convert a Tally trial balance or a firm's own accounting workbook into CA format financial
+                statements.
               </p>
             </div>
           </div>
@@ -111,31 +116,45 @@ export default function App() {
       </header>
 
       <main className="mx-auto max-w-6xl space-y-6 px-6 py-8">
-        {error && (
-          <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{error}</span>
+        <div className="rounded-2xl border bg-card p-2">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setInputType("trialBalance")}
+              className={
+                "rounded-lg px-4 py-2.5 text-sm font-semibold transition " +
+                (inputType === "trialBalance" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")
+              }
+            >
+              Trial Balance
+            </button>
+            <button
+              onClick={() => setInputType("accountingWorkbook")}
+              className={
+                "rounded-lg px-4 py-2.5 text-sm font-semibold transition " +
+                (inputType === "accountingWorkbook" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")
+              }
+            >
+              Accounting Workbook (ICAI Format)
+            </button>
           </div>
-        )}
+        </div>
+
+        {inputType === "accountingWorkbook" ? (
+          <IcaiWorkflow
+            entity={entity}
+            onEntityChange={setEntity}
+            figuresUnit={figuresUnit}
+            onFiguresUnitChange={setFiguresUnit}
+          />
+        ) : (
+          <>
+        <ErrorBanner message={error} />
 
         {/* Step 1: inputs */}
         <section className="rounded-2xl border bg-card p-6">
           <h2 className="text-sm font-semibold">1. Upload & entity type</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Entity type</label>
-              <select
-                value={entity}
-                onChange={(e) => setEntity(e.target.value as EntityType)}
-                className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
-              >
-                {ENTITY_ORDER.map((e) => (
-                  <option key={e} value={e}>
-                    {ENTITY_LABELS[e]}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <EntityTypeSelect value={entity} onChange={setEntity} options={ENTITY_ORDER} />
             <div>
               <label className="text-xs font-medium text-muted-foreground">
                 Trial Balance (.xlsx, .xls, .pdf)
@@ -150,22 +169,7 @@ export default function App() {
                 />
               </div>
             </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">
-                Figures Display Unit
-              </label>
-              <select
-                value={figuresUnit}
-                onChange={(e) => setFiguresUnit(e.target.value as FiguresUnit)}
-                className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
-              >
-                {FIGURES_UNIT_ORDER.map((u) => (
-                  <option key={u} value={u}>
-                    {FIGURES_UNIT_LABELS[u]}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <FiguresUnitSelect value={figuresUnit} onChange={setFiguresUnit} />
           </div>
           <div className="mt-4 flex items-center gap-3">
             <button
@@ -338,20 +342,7 @@ export default function App() {
               </p>
               <div className="mt-4 flex flex-wrap gap-4">
                 <div className="max-w-xs flex-1 rounded-lg border bg-secondary/40 p-3">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Figures Display Unit
-                  </label>
-                  <select
-                    value={figuresUnit}
-                    onChange={(e) => setFiguresUnit(e.target.value as FiguresUnit)}
-                    className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
-                  >
-                    {FIGURES_UNIT_ORDER.map((u) => (
-                      <option key={u} value={u}>
-                        {FIGURES_UNIT_LABELS[u]}
-                      </option>
-                    ))}
-                  </select>
+                  <FiguresUnitSelect value={figuresUnit} onChange={setFiguresUnit} />
                   <p className="mt-1 text-[11px] text-muted-foreground">
                     Applies to the generated Profit &amp; Loss and Balance Sheet.
                   </p>
@@ -389,6 +380,8 @@ export default function App() {
                 Generate &amp; download {OUTPUT_FORMAT_LABELS[outputFormat]}
               </button>
             </section>
+          </>
+        )}
           </>
         )}
       </main>

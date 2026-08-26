@@ -1,4 +1,5 @@
 import type { ConvertPayload, EntityType, ParseResult } from "./types";
+import { triggerDownload } from "./download";
 
 // Empty by default (bare /api/*), which is correct for standalone dev
 // (proxied by vite.config.ts) and standalone production (the backend serves
@@ -31,16 +32,5 @@ export async function convertToWorkbook(payload: ConvertPayload): Promise<void> 
     throw new Error(data?.message || "Could not generate the workbook.");
   }
   const blob = await res.blob();
-  const disposition = res.headers.get("content-disposition") ?? "";
-  const match = disposition.match(/filename="([^"]+)"/i);
-  const fileName = match?.[1] || `${payload.meta.firmName || "financials"}.xlsx`;
-
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  triggerDownload(blob, res.headers.get("content-disposition"), `${payload.meta.firmName || "financials"}.xlsx`);
 }
