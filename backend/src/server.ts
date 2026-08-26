@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express, { type ErrorRequestHandler } from "express";
 import multer, { MulterError } from "multer";
+import cors from "cors";
 
 import { parseAndClassify, buildWorkbook, buildFinancialStatementsPdf } from "./lib/tb/pipeline";
 import type { ConvertPayload, EntityType } from "./lib/tb/types";
@@ -44,7 +45,25 @@ function sanitizeEntityFileName(name: string, extension: "xlsx") {
 }
 
 const app = express();
+
+// Only enabled when the frontend is deployed on a different origin (e.g. a
+// Vercel-hosted SPA calling this backend on its own domain) - unset in the
+// embedded/same-origin deployment (see the static-file serving below), which
+// needs no CORS headers at all. Comma-separated so both a production and a
+// Vercel preview-deployment origin can be allowed at once.
+const allowedOrigins = (process.env.FRONTEND_ORIGIN ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+if (allowedOrigins.length > 0) {
+  app.use(cors({ origin: allowedOrigins }));
+}
+
 app.use(express.json({ limit: "5mb" }));
+
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok" });
+});
 
 app.post("/api/tbparse", upload.single("file"), async (req, res) => {
   try {

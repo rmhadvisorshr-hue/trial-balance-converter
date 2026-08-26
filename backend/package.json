@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "cors": "^2.8.6",
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "multer": "^2.2.0",
@@ -15,6 +16,7 @@
     "pdfkit": "^0.19.1"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/multer": "^2.2.0",
     "@types/node": "^22.16.5",
