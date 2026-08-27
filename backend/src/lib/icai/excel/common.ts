@@ -1,4 +1,4 @@
-import type { WorkbookAnalysis, IcaiNoteCode, NormalizedAccount } from "../types";
+import type { WorkbookAnalysis, IcaiNoteCode, IcaiEntityKind, NormalizedAccount } from "../types";
 
 export type YearKey = "amountCurrent" | "amountPrevious";
 
@@ -38,6 +38,16 @@ export function depreciationTotal(analysis: WorkbookAnalysis, year: YearKey): nu
 }
 
 export const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+// The client entity's own authorized-signatory designation for the
+// signature block (see excel/helpers.ts's signatureBlock) - not the CA's.
+// Mirrors the same mapping in lib/tb/builders/index.ts for the Trial Balance
+// pipeline's entity types.
+export function entitySignatoryDesignation(kind: IcaiEntityKind): string {
+  if (kind === "proprietor") return "Proprietor";
+  if (kind === "llp") return "Designated Partner";
+  return "Partner";
+}
 
 // Cost of materials consumed is the ICAI-prescribed title; a business whose
 // cost lines read like a construction/development trade (contract/labour/

@@ -1,7 +1,7 @@
 import type ExcelJS from "exceljs";
 import type { WorkbookAnalysis } from "../types";
-import { setCell, topBorder, applyColumnWidths } from "../../tb/excel/helpers";
-import { totalMany, ownersFundsTotal, fixedAssetsTotal, round2 } from "./common";
+import { setCell, topBorder, applyColumnWidths, signatureBlock } from "../../tb/excel/helpers";
+import { totalMany, ownersFundsTotal, fixedAssetsTotal, round2, entitySignatoryDesignation } from "./common";
 
 // Columns: A particulars, B note, C current year, D previous year.
 export function writeBalanceSheet(ws: ExcelJS.Worksheet, analysis: WorkbookAnalysis) {
@@ -141,4 +141,12 @@ export function writeBalanceSheet(ws: ExcelJS.Worksheet, analysis: WorkbookAnaly
   setCell(ws, r++, 1, "Significant accounting policies", {});
   r++;
   setCell(ws, r++, 1, "The accompanying notes are an integral part of these financial statements.", { italic: true });
+
+  signatureBlock(
+    ws,
+    r,
+    analysis,
+    `For ${analysis.entityName || "the entity"}`,
+    entitySignatoryDesignation(analysis.entityKind),
+  );
 }

@@ -209,9 +209,12 @@ export interface StatementMeta {
   asAtLabel: string; // e.g. "as at 31-Mar-25"
   cin?: string; // Company Identification Number - Schedule III (pvtltd) only
   llpin?: string; // LLP Identification Number - LLP only
-  caName?: string;
+  caName?: string; // e.g. "CA Namrata Prakash Sharma" - from the selected CA profile
+  caFirmName?: string; // the CA firm's name, e.g. "Namrata Prakash Sharma"
+  caFirmType?: string; // e.g. "Chartered Accountants"
+  caDesignation?: string; // the CA's own designation, e.g. "Proprietor" - not the client entity's
   caMembershipNo?: string;
-  caFirmRegNo?: string;
+  caFirmRegNo?: string; // FRN - optional
   udin?: string;
   place?: string;
   date?: string;

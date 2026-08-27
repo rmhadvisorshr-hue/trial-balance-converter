@@ -152,6 +152,17 @@ export interface WorkbookAnalysis {
   reviewItems: ReviewItem[];
   warnings: string[];
   unitHeading?: string | null;
+  // Report Details + selected CA - populated only at generate time, see
+  // IcaiWorkflow.tsx. Mirrors StatementMeta's equivalent fields in lib/types.ts.
+  place?: string;
+  date?: string;
+  udin?: string;
+  caName?: string;
+  caFirmName?: string;
+  caFirmType?: string;
+  caDesignation?: string;
+  caMembershipNo?: string;
+  caFirmRegNo?: string;
 }
 
 export type FileRole = "current" | "previous" | "exclude";

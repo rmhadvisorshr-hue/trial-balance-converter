@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FileSpreadsheet, Upload, Play, Loader2 } from "lucide-react";
 import {
   ENTITY_LABELS,
@@ -14,15 +14,22 @@ import {
   type StatementStyle,
 } from "./lib/types";
 import { parseTrialBalanceFile, convertToWorkbook } from "./lib/tb-client";
+import type { CAProfile } from "./lib/ca-types";
+import { listCAProfiles } from "./lib/ca-client";
 import IcaiWorkflow from "./IcaiWorkflow";
 import ErrorBanner from "./components/ErrorBanner";
 import EntityTypeSelect from "./components/EntityTypeSelect";
 import FiguresUnitSelect from "./components/FiguresUnitSelect";
+import CASelect from "./components/CASelect";
+import CAProfileManager from "./components/CAProfileManager";
+import TextField from "./components/TextField";
 
 const ENTITY_ORDER: EntityType[] = ["pvtltd", "partnership", "llp", "proprietor"];
 const OUTPUT_FORMAT_ORDER: OutputFormat[] = ["excel", "pdf"];
 
-type InputType = "trialBalance" | "accountingWorkbook";
+type InputType = "trialBalance" | "accountingWorkbook" | "caProfiles";
+
+const CA_REQUIRED_MESSAGE = "Please select a CA / Signing Authority before generating the report.";
 
 export default function App() {
   const [inputType, setInputType] = useState<InputType>("trialBalance");
@@ -39,6 +46,23 @@ export default function App() {
   const [busy, setBusy] = useState<"idle" | "parsing" | "generating">("idle");
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  // The centralized CA profile list - fetched fresh whenever the tab
+  // changes so returning from "CA Profiles" always reflects the latest
+  // create/edit/delete. Shared by both Trial Balance (below) and the
+  // Accounting Workbook tab (passed down to IcaiWorkflow).
+  const [caProfiles, setCaProfiles] = useState<CAProfile[]>([]);
+  const [selectedCaId, setSelectedCaId] = useState("");
+  // Tracks whether the user has manually typed into the Place field, so a CA
+  // selection only prefills it while it's still untouched (see req: "Do not
+  // overwrite a manually entered Place when the CA selection changes").
+  const [placeTouched, setPlaceTouched] = useState(false);
+
+  useEffect(() => {
+    listCAProfiles()
+      .then(setCaProfiles)
+      .catch(() => setCaProfiles([]));
+  }, [inputType]);
 
   const unmappedCount = useMemo(
     () => ledgers.filter((l) => l.code === "UNMAPPED" || !l.confident).length,
@@ -63,6 +87,7 @@ export default function App() {
       setParsed(res);
       setLedgers(res.ledgers);
       setMeta(res.meta);
+      setPlaceTouched(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to read the trial balance.");
     } finally {
@@ -73,11 +98,28 @@ export default function App() {
   async function handleGenerate() {
     if (!meta || !outputFormat) return;
     setError(null);
+    const selectedCa = caProfiles.find((p) => p.id === selectedCaId);
+    // The CA signature block only appears in the Excel output today - PDF
+    // generation is unchanged and does not require a CA selection.
+    if (outputFormat === "excel" && !selectedCa) {
+      setError(CA_REQUIRED_MESSAGE);
+      return;
+    }
     setBusy("generating");
     try {
+      const caFields = selectedCa
+        ? {
+            caName: selectedCa.caName,
+            caFirmName: selectedCa.firmName,
+            caFirmType: selectedCa.firmType,
+            caDesignation: selectedCa.designation,
+            caMembershipNo: selectedCa.membershipNo,
+            caFirmRegNo: selectedCa.frn,
+          }
+        : {};
       await convertToWorkbook({
         entity,
-        meta: { ...meta, figuresUnit },
+        meta: { ...meta, figuresUnit, ...caFields },
         ledgers,
         outputFormat,
         statementStyle,
@@ -86,6 +128,14 @@ export default function App() {
       setError(e instanceof Error ? e.message : "Failed to generate the workbook.");
     } finally {
       setBusy("idle");
+    }
+  }
+
+  function handleSelectCa(id: string) {
+    setSelectedCaId(id);
+    const profile = caProfiles.find((p) => p.id === id);
+    if (profile && !placeTouched && meta) {
+      setMeta({ ...meta, place: profile.place });
     }
   }
 
@@ -117,7 +167,7 @@ export default function App() {
 
       <main className="mx-auto max-w-6xl space-y-6 px-6 py-8">
         <div className="rounded-2xl border bg-card p-2">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <button
               onClick={() => setInputType("trialBalance")}
               className={
@@ -136,15 +186,27 @@ export default function App() {
             >
               Accounting Workbook (ICAI Format)
             </button>
+            <button
+              onClick={() => setInputType("caProfiles")}
+              className={
+                "rounded-lg px-4 py-2.5 text-sm font-semibold transition " +
+                (inputType === "caProfiles" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")
+              }
+            >
+              CA Profiles
+            </button>
           </div>
         </div>
 
-        {inputType === "accountingWorkbook" ? (
+        {inputType === "caProfiles" ? (
+          <CAProfileManager />
+        ) : inputType === "accountingWorkbook" ? (
           <IcaiWorkflow
             entity={entity}
             onEntityChange={setEntity}
             figuresUnit={figuresUnit}
             onFiguresUnitChange={setFiguresUnit}
+            caProfiles={caProfiles}
           />
         ) : (
           <>
@@ -194,50 +256,54 @@ export default function App() {
             <section className="rounded-2xl border bg-card p-6">
               <h2 className="text-sm font-semibold">2. Statement details</h2>
               <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <MetaField
+                <TextField
                   label="Firm / company name"
                   value={meta.firmName}
                   onChange={(v) => setMeta({ ...meta, firmName: v })}
                 />
                 {entity === "pvtltd" && (
-                  <MetaField
+                  <TextField
                     label="CIN"
                     value={meta.cin ?? ""}
                     onChange={(v) => setMeta({ ...meta, cin: v })}
                   />
                 )}
                 {entity === "llp" && (
-                  <MetaField
+                  <TextField
                     label="LLPIN"
                     value={meta.llpin ?? ""}
                     onChange={(v) => setMeta({ ...meta, llpin: v })}
                   />
                 )}
-                <MetaField
+                <TextField
                   label="Period"
                   value={meta.periodLabel}
                   onChange={(v) => setMeta({ ...meta, periodLabel: v })}
                 />
-                <MetaField
+                <TextField
                   label="As at"
                   value={meta.asAtLabel}
                   onChange={(v) => setMeta({ ...meta, asAtLabel: v })}
                 />
-                <MetaField
+                <TextField
                   label="Place"
                   value={meta.place ?? ""}
-                  onChange={(v) => setMeta({ ...meta, place: v })}
+                  onChange={(v) => {
+                    setPlaceTouched(true);
+                    setMeta({ ...meta, place: v });
+                  }}
                 />
-                <MetaField
+                <TextField
                   label="Date"
                   value={meta.date ?? ""}
                   onChange={(v) => setMeta({ ...meta, date: v })}
                 />
-                <MetaField
+                <TextField
                   label="UDIN"
                   value={meta.udin ?? ""}
                   onChange={(v) => setMeta({ ...meta, udin: v })}
                 />
+                <CASelect profiles={caProfiles} value={selectedCaId} onChange={handleSelectCa} />
               </div>
               {parsed.warnings.length > 0 && (
                 <ul className="mt-4 space-y-1 text-xs text-amber-600">
@@ -385,27 +451,6 @@ export default function App() {
           </>
         )}
       </main>
-    </div>
-  );
-}
-
-function MetaField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div>
-      <label className="text-xs font-medium text-muted-foreground">{label}</label>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
-      />
     </div>
   );
 }

@@ -10,6 +10,16 @@ import { analyzeWorkbookFiles, buildIcaiWorkbook, scaleAnalysis } from "./lib/ic
 import type { FileRole } from "./lib/icai/parsers/fileRoleDetector";
 import type { FiguresUnit } from "./lib/icai/excel/scale";
 import type { IcaiEntityKind, WorkbookAnalysis } from "./lib/icai/types";
+import {
+  listCAProfiles,
+  createCAProfile,
+  updateCAProfile,
+  deleteCAProfile,
+  validateCAProfileInput,
+  hasRequiredCaFields,
+  CA_REQUIRED_MESSAGE,
+  type CAProfileInput,
+} from "./lib/caProfiles";
 
 const PORT = Number(process.env.PORT) || 8097;
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -65,6 +75,47 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+// Centralized CA profile store - shared by both the Trial Balance and
+// Accounting Workbook frontends (see lib/caProfiles.ts).
+app.get("/api/ca-profiles", async (_req, res) => {
+  res.json(await listCAProfiles());
+});
+
+app.post("/api/ca-profiles", async (req, res) => {
+  const input = req.body as Partial<CAProfileInput>;
+  const validationError = validateCAProfileInput(input);
+  if (validationError) {
+    res.status(400).json({ code: "VALIDATION_ERROR", message: validationError });
+    return;
+  }
+  const profile = await createCAProfile(input as CAProfileInput);
+  res.status(201).json(profile);
+});
+
+app.put("/api/ca-profiles/:id", async (req, res) => {
+  const input = req.body as Partial<CAProfileInput>;
+  const validationError = validateCAProfileInput(input);
+  if (validationError) {
+    res.status(400).json({ code: "VALIDATION_ERROR", message: validationError });
+    return;
+  }
+  const profile = await updateCAProfile(req.params.id, input as CAProfileInput);
+  if (!profile) {
+    res.status(404).json({ code: "NOT_FOUND", message: "CA profile not found." });
+    return;
+  }
+  res.json(profile);
+});
+
+app.delete("/api/ca-profiles/:id", async (req, res) => {
+  const deleted = await deleteCAProfile(req.params.id);
+  if (!deleted) {
+    res.status(404).json({ code: "NOT_FOUND", message: "CA profile not found." });
+    return;
+  }
+  res.status(204).end();
+});
+
 app.post("/api/tbparse", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) {
@@ -97,6 +148,14 @@ app.post("/api/tbconvert", async (req, res) => {
         `attachment; filename="${sanitizeOutputName(firmName, "pdf")}"`,
       );
       res.send(buffer);
+      return;
+    }
+
+    // Excel output only: a CA / Signing Authority must be selected so the
+    // generated signature block never falls back to another CA's details -
+    // see lib/caProfiles.ts and excel/helpers.ts's signatureBlock.
+    if (!hasRequiredCaFields(payload.meta || {})) {
+      res.status(400).json({ code: "CA_REQUIRED", message: CA_REQUIRED_MESSAGE });
       return;
     }
 
@@ -148,6 +207,11 @@ app.post("/api/icai/generate", async (req, res) => {
     const analysis = body?.analysis;
     if (!analysis || !Array.isArray(analysis.accounts)) {
       res.status(400).json({ code: "BAD_PAYLOAD", message: "Invalid analysis payload." });
+      return;
+    }
+    // A CA / Signing Authority must be selected - same gate as /api/tbconvert.
+    if (!hasRequiredCaFields(analysis)) {
+      res.status(400).json({ code: "CA_REQUIRED", message: CA_REQUIRED_MESSAGE });
       return;
     }
     const scaled = scaleAnalysis(analysis, body.figuresUnit || "actual");

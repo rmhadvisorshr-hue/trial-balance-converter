@@ -10,28 +10,52 @@ import {
   type IcaiNoteCode,
   type WorkbookAnalysis,
 } from "./lib/icai-types";
+import type { CAProfile } from "./lib/ca-types";
 import { analyzeIcaiWorkbooks, generateIcaiWorkbook } from "./lib/icai-client";
 import ErrorBanner from "./components/ErrorBanner";
 import EntityTypeSelect from "./components/EntityTypeSelect";
 import FiguresUnitSelect from "./components/FiguresUnitSelect";
+import CASelect from "./components/CASelect";
+import TextField from "./components/TextField";
 
 const ICAI_ENTITY_OPTIONS: EntityType[] = ["partnership", "llp", "proprietor"];
 const ROLE_LABELS: Record<FileRole, string> = { current: "Current Year", previous: "Previous Year", exclude: "Exclude" };
+
+const CA_REQUIRED_MESSAGE = "Please select a CA / Signing Authority before generating the report.";
 
 interface Props {
   entity: EntityType;
   onEntityChange: (v: EntityType) => void;
   figuresUnit: FiguresUnit;
   onFiguresUnitChange: (v: FiguresUnit) => void;
+  caProfiles: CAProfile[];
 }
 
-export default function IcaiWorkflow({ entity, onEntityChange, figuresUnit, onFiguresUnitChange }: Props) {
+export default function IcaiWorkflow({ entity, onEntityChange, figuresUnit, onFiguresUnitChange, caProfiles }: Props) {
   const [files, setFiles] = useState<File[]>([]);
   const [pendingReview, setPendingReview] = useState<{ reason: string; detections: FileRoleDetection[] } | null>(null);
   const [roleChoices, setRoleChoices] = useState<Record<string, FileRole>>({});
   const [analysis, setAnalysis] = useState<WorkbookAnalysis | null>(null);
   const [busy, setBusy] = useState<"idle" | "analyzing" | "generating">("idle");
   const [error, setError] = useState<string | null>(null);
+
+  // Report Details - this pipeline had no such fields before; they exist now
+  // purely to carry the report-specific place/date/UDIN and selected CA into
+  // the signature block the generated Excel now includes (see
+  // backend/src/lib/icai/excel/{balanceSheet,profitAndLoss}.ts).
+  const [reportPlace, setReportPlace] = useState("");
+  const [reportDate, setReportDate] = useState("");
+  const [reportUdin, setReportUdin] = useState("");
+  const [selectedCaId, setSelectedCaId] = useState("");
+  const [placeTouched, setPlaceTouched] = useState(false);
+
+  function handleSelectCa(id: string) {
+    setSelectedCaId(id);
+    const profile = caProfiles.find((p) => p.id === id);
+    if (profile && !placeTouched) {
+      setReportPlace(profile.place);
+    }
+  }
 
   // ICAI's Guidance Note only covers non-corporate entities; if the shared
   // entity-type value is still at the Trial Balance tab's "pvtltd" default,
@@ -107,9 +131,26 @@ export default function IcaiWorkflow({ entity, onEntityChange, figuresUnit, onFi
   async function handleGenerate() {
     if (!analysis) return;
     setError(null);
+    const selectedCa = caProfiles.find((p) => p.id === selectedCaId);
+    if (!selectedCa) {
+      setError(CA_REQUIRED_MESSAGE);
+      return;
+    }
     setBusy("generating");
     try {
-      await generateIcaiWorkbook(analysis, figuresUnit);
+      const withReportDetails: WorkbookAnalysis = {
+        ...analysis,
+        place: reportPlace,
+        date: reportDate,
+        udin: reportUdin,
+        caName: selectedCa.caName,
+        caFirmName: selectedCa.firmName,
+        caFirmType: selectedCa.firmType,
+        caDesignation: selectedCa.designation,
+        caMembershipNo: selectedCa.membershipNo,
+        caFirmRegNo: selectedCa.frn,
+      };
+      await generateIcaiWorkbook(withReportDetails, figuresUnit);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to generate the financial statements.");
     } finally {
@@ -352,7 +393,24 @@ export default function IcaiWorkflow({ entity, onEntityChange, figuresUnit, onFi
           )}
 
           <section className="rounded-2xl border bg-card p-6">
-            <h2 className="text-sm font-semibold">5. Generate</h2>
+            <h2 className="text-sm font-semibold">5. Report details</h2>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <TextField
+                label="Place"
+                value={reportPlace}
+                onChange={(v) => {
+                  setPlaceTouched(true);
+                  setReportPlace(v);
+                }}
+              />
+              <TextField label="Date" value={reportDate} onChange={setReportDate} />
+              <TextField label="UDIN" value={reportUdin} onChange={setReportUdin} />
+              <CASelect profiles={caProfiles} value={selectedCaId} onChange={handleSelectCa} />
+            </div>
+          </section>
+
+          <section className="rounded-2xl border bg-card p-6">
+            <h2 className="text-sm font-semibold">6. Generate</h2>
             <p className="mt-2 text-xs text-muted-foreground">
               Output: ICAI-format Balance Sheet, Statement of P&amp;L, Notes 1-26, supporting schedules and a Basis of
               Preparation sheet flagging any judgement calls for your review.

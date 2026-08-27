@@ -1,5 +1,22 @@
 import type ExcelJS from "exceljs";
-import type { StatementMeta } from "../types";
+
+// Structural subset of both StatementMeta (Trial Balance) and WorkbookAnalysis
+// (Accounting Workbook / ICAI) - lets signatureBlock() below serve as the one
+// shared CA-signature renderer for both pipelines without either importing
+// the other's type module. Every field is caller-supplied; there are no
+// hardcoded CA fallbacks - callers (server.ts) must validate a CA profile was
+// selected before reaching this function.
+export interface SignatureMeta {
+  place?: string;
+  date?: string;
+  udin?: string;
+  caName?: string;
+  caFirmName?: string;
+  caFirmType?: string;
+  caDesignation?: string;
+  caMembershipNo?: string;
+  caFirmRegNo?: string;
+}
 
 export const INR_FMT = "#,##,##0.00;(#,##,##0.00)";
 
@@ -97,11 +114,16 @@ export function boxBorder(ws: ExcelJS.Worksheet, r1: number, c1: number, r2: num
   }
 }
 
-// The CA signature / UDIN footer block used in the (V) sheets.
+// The CA signature / UDIN footer block used in the (V) sheets, and (for the
+// Accounting Workbook pipeline) the Balance Sheet and P&L sheets. All CA
+// fields (caName/caFirmName/caFirmType/caDesignation/caMembershipNo) are
+// sourced from the CA profile the user selected at generate time - callers
+// must validate one was selected before calling this (see server.ts's
+// hasRequiredCaFields gate); there is no fallback CA identity here.
 export function signatureBlock(
   ws: ExcelJS.Worksheet,
   startRow: number,
-  meta: StatementMeta,
+  meta: SignatureMeta,
   forFirmText: string,
   designation: string,
 ): number {
@@ -117,15 +139,17 @@ export function signatureBlock(
   r += 2;
   setCell(ws, r, 3, "As per our report on even date");
   r += 1;
-  setCell(ws, r, 3, `For ${meta.caName ?? "Namrata Prakash Sharma"}`);
+  setCell(ws, r, 3, `For ${meta.caFirmName ?? ""}`);
   r += 1;
-  setCell(ws, r, 3, "(Chartered Accountants)");
+  setCell(ws, r, 3, `(${meta.caFirmType ?? ""})`);
   r += 3;
-  setCell(ws, r, 3, `Proprietor : CA ${meta.caName ?? "Namrata Prakash Sharma"}`);
+  setCell(ws, r, 3, `${meta.caDesignation ?? ""} : ${meta.caName ?? ""}`);
   r += 1;
-  setCell(ws, r, 3, `M No : ${meta.caMembershipNo ?? "177309"}`);
-  r += 1;
-  setCell(ws, r, 3, `FRN No : ${meta.caFirmRegNo ?? "144860W"}`);
+  setCell(ws, r, 3, `M No : ${meta.caMembershipNo ?? ""}`);
+  if (meta.caFirmRegNo) {
+    r += 1;
+    setCell(ws, r, 3, `FRN No : ${meta.caFirmRegNo}`);
+  }
   return r;
 }
 

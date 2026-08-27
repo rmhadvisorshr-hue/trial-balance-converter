@@ -174,6 +174,19 @@ export interface WorkbookAnalysis {
   // Set only when the CA picks a non-actual display unit at generate time
   // (see excel/scale.ts) - null for the analysis the review screen shows.
   unitHeading?: string | null;
+  // Report Details + selected CA - set by the frontend only at generate time
+  // (see IcaiWorkflow.tsx), never present on the analysis the review screen
+  // shows. Mirrors StatementMeta's equivalent fields in lib/tb/types.ts -
+  // both satisfy excel/helpers.ts's shared SignatureMeta interface.
+  place?: string;
+  date?: string;
+  udin?: string;
+  caName?: string;
+  caFirmName?: string;
+  caFirmType?: string;
+  caDesignation?: string;
+  caMembershipNo?: string;
+  caFirmRegNo?: string;
   accounts: NormalizedAccount[];
   owners: OwnerCapitalAccount[];
   fixedAssets: { current: FixedAssetLine[]; previous: FixedAssetLine[] };

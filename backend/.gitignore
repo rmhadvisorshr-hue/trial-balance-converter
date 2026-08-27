@@ -4,3 +4,7 @@ dist
 .env
 .env.*
 !.env.example
+
+# Runtime CA profile store (see src/lib/caProfiles.ts) - real staff data,
+# not source; never commit actual CA identities to git history.
+data/

@@ -1,7 +1,7 @@
 import type ExcelJS from "exceljs";
 import type { WorkbookAnalysis } from "../types";
-import { setCell, topBorder, applyColumnWidths } from "../../tb/excel/helpers";
-import { totalFor, round2, costNoteTitle, depreciationTotal } from "./common";
+import { setCell, topBorder, applyColumnWidths, signatureBlock } from "../../tb/excel/helpers";
+import { totalFor, round2, costNoteTitle, depreciationTotal, entitySignatoryDesignation } from "./common";
 
 export function writeProfitAndLoss(ws: ExcelJS.Worksheet, analysis: WorkbookAnalysis) {
   applyColumnWidths(ws, [50, 8, 20, 20]);
@@ -90,4 +90,12 @@ export function writeProfitAndLoss(ws: ExcelJS.Worksheet, analysis: WorkbookAnal
   line("Share of profit credited to Partners' Capital Accounts", "", round2(analysis.owners.reduce((s, o) => s + o.shareOfProfit, 0)), round2(analysis.owners.reduce((s, o) => s + o.shareOfProfitPrevious, 0)));
   r++;
   setCell(ws, r++, 1, "The accompanying notes are an integral part of these financial statements.", { italic: true });
+
+  signatureBlock(
+    ws,
+    r,
+    analysis,
+    `For ${analysis.entityName || "the entity"}`,
+    entitySignatoryDesignation(analysis.entityKind),
+  );
 }
