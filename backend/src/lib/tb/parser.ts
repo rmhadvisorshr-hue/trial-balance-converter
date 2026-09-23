@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import type { TBRow, StatementMeta } from "./types";
+import { loadExcelWorkbook } from "../excelCompat";
 
 export interface RawTrialBalance {
   meta: StatementMeta;
@@ -47,8 +48,7 @@ function cellText(value: unknown): string {
 export async function parseTrialBalanceXlsx(
   buffer: ArrayBuffer | Buffer,
 ): Promise<RawTrialBalance> {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buffer as ArrayBuffer);
+  const wb = await loadExcelWorkbook(buffer);
   const ws = wb.worksheets[0];
   const warnings: string[] = [];
 

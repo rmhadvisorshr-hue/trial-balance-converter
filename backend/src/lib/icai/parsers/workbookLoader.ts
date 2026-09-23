@@ -1,6 +1,6 @@
-import ExcelJS from "exceljs";
 import { readGrid, type Grid } from "./grid";
 import { classifySheet, type SheetKind } from "./sheetClassifier";
+import { loadExcelWorkbook } from "../../excelCompat";
 
 export interface ScannedSheet {
   name: string;
@@ -42,8 +42,7 @@ function detectPeriodEnd(sheets: ScannedSheet[]): string {
 }
 
 export async function loadWorkbook(buffer: Buffer | ArrayBuffer, fileName: string): Promise<WorkbookScan> {
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buffer as ArrayBuffer);
+  const wb = await loadExcelWorkbook(buffer);
 
   const sheets: ScannedSheet[] = wb.worksheets.map((ws) => {
     const grid = readGrid(ws);
